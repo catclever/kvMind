@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI心理咨询</title>
+    <style>
+        /* @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        
+        .cursor {
+            display: inline-block;
+            animation: blink 1s infinite;
+            margin-left: 2px;
+        } */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+
+        .ai-message {
+            background-color: #f5f5f5;
+            margin-right: 20%;
+        }
+
+        .input-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .stream-input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .stream-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            min-height: 20px;
+            cursor: text;
+            white-space: pre-wrap;       /* 允许文本换行 */
+            word-wrap: break-word;       /* 允许长单词换行 */
+            overflow-wrap: break-word;   /* 现代浏览器的换行属性 */
+        }
+
+        .current-input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+            margin-bottom: 10px;
+            min-height: 20px;
+            color: #666;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #1976d2;
+        }
+
+        .status {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #666;
+        }
+
+        .typing-indicator {
+            display: none;
+            margin-bottom: 15px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .blinking-cursor {
+        animation: blink 1s step-end infinite;
+        font-weight: normal; /* 您可以根据需要调整光标的样式 */
+        margin-left: 1px; /* 给光标和文字之间一点点间距 */
+        }
+
+        @keyframes blink {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="status" id="status">等待连接...</div>
+        <div class="messages" id="messages"></div>
+        <div class="typing-indicator" id="typingIndicator">AI正在思考...</div>
+        <div class="input-container">
+            <div class="stream-input-container">
+                <div class="stream-input" id="streamInput" tabindex="0"></div>
+                <button id="sendButton">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入字符流输入组件 -->
+    <script src="streamInputComponent.js"></script>
+    <script>
+        let ws;
+        const messagesDiv = document.getElementById('messages');
+        const streamInputDiv = document.getElementById('streamInput');
+        const sendButton = document.getElementById('sendButton');
+        const statusDiv = document.getElementById('status');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        // 当前累积的输入内容
+        let currentMessage = '';
+
+        // 生成随机的客户端ID
+        const clientId = Math.random().toString(36).substring(7);
+        
+        // 保存StreamInputComponent实例的引用
+        let streamInputInstance = null;
+
+        // 连接WebSocket
+        function connect() {
+            // 创建WebSocket连接
+            ws = new WebSocket('ws://localhost:8765/ws/' + clientId);
+            
+            // 连接打开时
+            ws.onopen = function() {
+                statusDiv.textContent = '已连接';
+                statusDiv.style.color = '#4caf50';
+                // 初始化字符流输入
+                initStreamInput();
+            };
+            
+            // 连接关闭时
+            ws.onclose = function() {
+                statusDiv.textContent = '连接已断开，尝试重新连接...';
+                statusDiv.style.color = '#f44336';
+                
+                // 销毁现有的StreamInputComponent实例
+                if (streamInputInstance) {
+                    streamInputInstance.destroy();
+                    streamInputInstance = null;
+                }
+                
+                // 尝试重新连接
+                setTimeout(connect, 3000);
+            };
+            
+            // 连接错误时
+            ws.onerror = function() {
+                statusDiv.textContent = '连接错误';
+                statusDiv.style.color = '#f44336';
+            };
+            
+            // 收到消息时
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+
+        // 处理接收到的消息
+        function handleMessage(data) {
+            switch(data.type) {
+                case 'state_update':
+                    handleStateUpdate(data.state);
+                    break;
+                case 'response':
+                    // 更新最后一条AI消息或添加新消息
+                    updateOrAddAIMessage(data.content);
+                    break;
+            }
+        }
+
+        // 更新或添加AI消息
+        function updateOrAddAIMessage(content) {
+            // 查找最后一条AI消息
+            const aiMessages = document.querySelectorAll('.ai-message');
+            const lastAIMessage = aiMessages[aiMessages.length - 1];
+            
+            if (lastAIMessage && lastAIMessage === messagesDiv.lastElementChild) {
+                // 更新最后一条AI消息
+                lastAIMessage.textContent = content;
+            } else {
+                // 添加新的AI消息
+                addMessage(content, 'ai');
+            }
+        }
+
+        // 发送消息 (这是主要的、正确的sendMessage函数)
+        function sendMessage(content, isComplete = false) {
+            if (!content.trim()) return;
+            
+            if (isComplete) {
+                addMessage(content, 'user'); // 将用户消息添加到UI
+                // 清空当前消息
+                currentMessage = '';
+                
+                // 发送消息到服务器
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'user_input',
+                        content: content,
+                        complete: true,
+                        client_id: clientId
+                    }));
+                }
+            } else {
+                // 发送部分消息到服务器 (如果需要用户输入时也实时发送)
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'user_input',
+                        content: content,
+                        complete: false,
+                        client_id: clientId
+                    }));
+                }
+                // 更新当前消息
+                currentMessage = content;
+            }
+        }
+
+        // 处理状态更新
+        function handleStateUpdate(state) {
+            switch(state) {
+                case 'thinking':
+                case 'responding':
+                    typingIndicator.style.display = 'block';
+                    break;
+                default:
+                    typingIndicator.style.display = 'none';
+            }
+        }
+
+        // 添加消息到聊天界面
+        function addMessage(content, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // [移除了这里原有的第二个sendMessage函数，它仅用于模拟AI回复]
+
+        // 初始化字符流输入
+        function initStreamInput() {
+            // 如果已经有实例，先销毁它
+            if (streamInputInstance) {
+                streamInputInstance.destroy();
+            }
+            
+            // 创建字符流输入实例
+            streamInputInstance = new StreamInputComponent({
+                container: streamInputDiv,
+                submitButton: sendButton,
+                sendInterval: 3000,  // 每3秒检查一次
+                breakChars: ['.', '?', '!', '。', '？', '！', ',', '，', ';', '；', '\n'], // 标点符号列表
+                // 每个字符输入时的回调
+                onInput: (text) => {
+                    // 更新当前消息
+                    console.log('输入内容:', text);
+                },
+                // 自动发送内容的回调
+                onSend: (content) => {
+                    // 显示消息并清空输入
+                    console.log('自动发送内容:', content);
+                    sendMessage(content, true); // 调用主要的sendMessage函数
+                },
+                // 点击发送按钮时的回调
+                onSubmit: (content) => {
+                    if (content) {
+                        // 显示消息并清空输入
+                        console.log('提交消息:', content);
+                        sendMessage(content, true); // 调用主要的sendMessage函数
+                    }
+                }
+            });
+        }
+
+        // 启动连接
+        connect();
+    </script>
+</body>
+</html>
