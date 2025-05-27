@@ -1,11 +1,11 @@
 # kvMind
 
 
-**sent_kv_cache.py**：
+## **sent_kv_cache.py**：
 - 按句子进行kv计算
 - 基于预计算的kv cache进行生成
-**mortise.py**：
+## **mortise.py**：
 支持性功能
-**client 目录**：
+## **client 目录**：
 - 一个（仅示意）的前端demo，展示陪伴类产品的文字交互。不强调回复的实时性，而是信息发送的实时性，让用户更少思考、压力更小地进行表达
 - 后端可以实时计算kv cache，但只有在满足条件时才生成回复
