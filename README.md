@@ -1,14 +1,22 @@
 # kvMind
 
+The system enables efficient in-context learning by:
+Pre-computing KV caches for text chunks
+Using attention mechanisms to identify relevant context
+Leveraging cached representations for faster generation
 
-## **sent_kv_cache.py**：
-- 按句子进行kv计算
-- 基于预计算的kv cache进行生成
-- 例子是读取整本小王子，然后进行对话，可以实现对文本内容和情感的记忆（比如直接问 你怎么评价蛇？ 不需要在问题中显示告知上下文）
-- 在陪伴场景中，需要准备一些AI角色的第一人称语料进行缓存，同时可以缓存对话记录
-- （ToDo) 提取指定位置（句子）的缓存
+## **kv_retrieve.py**
+- Implements batch processing of text chunks to generate KV caches
+- Provides various scoring methods (average, top tokens, max) to evaluate relevance
+- Features efficient batch retrieval capabilities that calculate attention scores across multiple chunks simultaneously
+## **ag_kv.py**
+- Implements a RAG (Retrieval-Augmented Generation) pipeline using KV caches
+- Processes and indexes text using sentence-based chunking
+- Retrieves relevant context chunks based on attention scores
+- Generates answers using the retrieved context's KV caches
 ## **mortise.py**：
-支持性功能，包括保存和读取kv cache（虽然缓存文件很大，但是以空间换时间吧~）
+Support functions, including saving and reading KV cache (although cache files are large, it's a space-time tradeoff).
+
 ## **client 目录**：
-- 一个（仅示意）的前端demo，展示陪伴类产品的文字交互。不强调回复的实时性，而是信息发送的实时性，让用户更少思考、压力更小地进行表达
-- 后端可以实时计算kv cache，但只有在满足条件时才生成回复
+- A (demonstration only) frontend demo showcasing text interactions for companion-type products. It emphasizes real-time message sending rather than real-time responses, allowing users to express themselves with less thinking and pressure.
+- The backend can calculate KV cache in real-time, but only generates responses when conditions are met.
